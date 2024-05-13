@@ -100,25 +100,31 @@ func (h *gqlWSConnectionHandler) StartBlocking(sub Subscription) {
 // because the library "nhooyr.io/websocket" doesn't allow reading with a context with Timeout
 // we'll block forever on reading until the context of the gqlWSConnectionHandler stops
 func (h *gqlWSConnectionHandler) readBlocking(ctx context.Context, dataCh chan []byte, errCh chan error) {
-	for {
-		msgType, data, err := h.conn.Read(ctx)
-		if ctx.Err() != nil {
-			errCh <- ctx.Err()
-			return
-		}
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if msgType != websocket.MessageText {
-			continue
-		}
-		select {
-		case dataCh <- data:
-		case <-ctx.Done():
-			return
-		}
-	}
+    for {
+        msgType, data, err := h.conn.Read(ctx)
+        if ctx.Err() != nil {
+            select {
+            case errCh <- ctx.Err():
+            case <-ctx.Done():
+                return
+            }
+        }
+        if err != nil {
+            select {
+            case errCh <- err:
+            case <-ctx.Done():
+                return
+            }
+        }
+        if msgType != websocket.MessageText {
+            continue
+        }
+        select {
+        case dataCh <- data:
+        case <-ctx.Done():
+            return
+        }
+    }
 }
 
 func (h *gqlWSConnectionHandler) unsubscribeAllAndCloseConn() {
